@@ -1,0 +1,3 @@
+{
+  "_comment": "Manual image matches. Key = product name exactly as in products.json (case-insensitive). Value = file name in public/products/items/. Overrides win over automatic matching. Run `npm run match-images` after editing."
+}
