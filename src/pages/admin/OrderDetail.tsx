@@ -1,5 +1,5 @@
-import { ArrowLeft, Building, CircleCheck, CircleX, Clock, Loader2, Phone, Printer, User } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { ArrowLeft, Building, CircleCheck, CircleX, Clock, Edit2, Loader2, Phone, Printer, Save, User } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { StatusBadge } from '../../components/admin/StatusBadge';
 import { PackBadge } from '../../components/order/PackBadge';
@@ -10,12 +10,216 @@ import { useAuth } from '../../hooks/useAuth';
 import { cn, fmtCbm, fmtDateTime, fmtInt, fmtKg } from '../../lib/format';
 import type { Order, OrderStatus } from '../../lib/types';
 import { orderService } from '../../services/orderService';
+import { PRODUCTS } from '../../data/catalog';
+import { readJSON } from '../../services/storage';
+import type { AdminProduct } from '../../services/productService';
+import { buildLines, sumTotals } from '../../lib/calc';
 
 const EVENT_STYLE: Record<OrderStatus, { icon: typeof Clock; cls: string; label: string }> = {
   pending: { icon: Clock, cls: 'bg-turmeric text-maroon', label: 'Order placed' },
   approved: { icon: CircleCheck, cls: 'bg-leaf text-white', label: 'Approved' },
   rejected: { icon: CircleX, cls: 'bg-chilli text-white', label: 'Rejected' },
 };
+
+const INPUT_CLS =
+  'w-full rounded-xl border-2 border-ink/10 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-chilli transition';
+
+/* ------------------------------------------------------------------ edit panel */
+
+function EditOrderPanel({
+  order,
+  onSave,
+  onCancel,
+  saving,
+}: {
+  order: Order;
+  onSave: (patch: { customer?: { name: string; phone: string; company?: string }; quantities?: Record<number, number>; note?: string }) => void;
+  onCancel: () => void;
+  saving: boolean;
+}) {
+  const [custName, setCustName] = useState(order.customer.name);
+  const [custPhone, setCustPhone] = useState(order.customer.phone);
+  const [custCompany, setCustCompany] = useState(order.customer.company ?? '');
+  const [note, setNote] = useState('');
+
+  // Build quantities from existing order items
+  const [quantities, setQuantities] = useState<Record<number, number>>(() => {
+    const q: Record<number, number> = {};
+    for (const item of order.items) q[item.productId] = item.boxes;
+    return q;
+  });
+
+  // Merge static + admin products for display
+  const allProducts = useMemo(() => {
+    const adminProds = readJSON<AdminProduct[]>('admin-products', []);
+    const staticProds = PRODUCTS as unknown as AdminProduct[];
+    const byId = new Map<number, AdminProduct>();
+    for (const p of [...staticProds, ...adminProds]) byId.set(p.id, p);
+    return Array.from(byId.values());
+  }, []);
+
+  const activeProducts = useMemo(
+    () => allProducts.filter((p) => !('active' in p) || (p as AdminProduct).active),
+    [allProducts],
+  );
+
+  const categoryList = useMemo(() => {
+    const cats = new Set(activeProducts.map((p) => p.category));
+    return Array.from(cats).sort();
+  }, [activeProducts]);
+
+  const [activeCategory, setActiveCategory] = useState<string>('all');
+
+  const visibleProducts = useMemo(
+    () => (activeCategory === 'all' ? activeProducts : activeProducts.filter((p) => p.category === activeCategory)),
+    [activeProducts, activeCategory],
+  );
+
+  // Recalculate preview lines
+  const previewLines = useMemo(() => {
+    return buildLines(activeProducts as Parameters<typeof buildLines>[0], quantities);
+  }, [activeProducts, quantities]);
+  const previewTotals = useMemo(() => sumTotals(previewLines), [previewLines]);
+
+  const setQty = (id: number, val: string) => {
+    const n = Math.max(0, Math.floor(Number(val) || 0));
+    setQuantities((q) => {
+      if (n === 0) {
+        const next = { ...q };
+        delete next[id];
+        return next;
+      }
+      return { ...q, [id]: n };
+    });
+  };
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!custName.trim()) return;
+    onSave({
+      customer: { name: custName.trim(), phone: custPhone.trim(), company: custCompany.trim() || undefined },
+      quantities: Object.keys(quantities).length > 0 ? quantities : undefined,
+      note: note.trim() || undefined,
+    });
+  };
+
+  return (
+    <form onSubmit={handleSave} className="space-y-6">
+      {/* Customer */}
+      <div className="rounded-2xl bg-white p-5 ring-1 ring-ink/[0.06]">
+        <h3 className="font-display text-base font-bold text-maroon mb-4">Customer details</h3>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div>
+            <label className="mb-1.5 block text-xs font-bold text-ink/60 uppercase tracking-wider">Name *</label>
+            <input required value={custName} onChange={(e) => setCustName(e.target.value)} className={INPUT_CLS} />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-bold text-ink/60 uppercase tracking-wider">Phone *</label>
+            <input required value={custPhone} onChange={(e) => setCustPhone(e.target.value)} className={INPUT_CLS} />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-bold text-ink/60 uppercase tracking-wider">Company</label>
+            <input value={custCompany} onChange={(e) => setCustCompany(e.target.value)} placeholder="Optional" className={INPUT_CLS} />
+          </div>
+        </div>
+      </div>
+
+      {/* Items editor */}
+      <div className="rounded-2xl bg-white p-5 ring-1 ring-ink/[0.06]">
+        <h3 className="font-display text-base font-bold text-maroon mb-3">Order items</h3>
+
+        {/* Category tabs */}
+        <div className="no-scrollbar -mx-1 mb-4 flex gap-1 overflow-x-auto px-1">
+          {['all', ...categoryList].map((cat) => (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => setActiveCategory(cat)}
+              className={cn(
+                'shrink-0 rounded-full px-3.5 py-1.5 text-xs font-bold transition whitespace-nowrap',
+                activeCategory === cat ? 'bg-maroon text-cream' : 'bg-ink/5 text-ink/65 hover:bg-ink/10',
+              )}
+            >
+              {cat === 'all' ? 'All' : cat}
+            </button>
+          ))}
+        </div>
+
+        <div className="max-h-72 overflow-y-auto">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 bg-white text-left text-[0.68rem] uppercase tracking-wider text-ink/50">
+              <tr>
+                <th className="py-2 pr-3 font-bold">Product</th>
+                <th className="px-3 py-2 font-bold">Weight</th>
+                <th className="px-3 py-2 text-right font-bold">Boxes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visibleProducts.map((p) => (
+                <tr key={p.id} className={cn('border-t border-ink/[0.06]', (quantities[p.id] ?? 0) > 0 && 'bg-turmeric/5')}>
+                  <td className="py-2 pr-3">
+                    <p className="font-medium leading-tight">{p.name}</p>
+                    <p className="text-[0.65rem] text-ink/40">{p.category}</p>
+                  </td>
+                  <td className="px-3 py-2 text-ink/60">{p.weight}</td>
+                  <td className="px-3 py-2">
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={quantities[p.id] ?? ''}
+                      onChange={(e) => setQty(p.id, e.target.value)}
+                      placeholder="0"
+                      className="w-20 rounded-lg border-2 border-ink/10 px-2 py-1 text-right text-sm outline-none focus:border-chilli ml-auto block"
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Preview totals */}
+        {previewLines.length > 0 && (
+          <div className="mt-4 flex flex-wrap gap-4 border-t border-ink/[0.06] pt-4 text-sm">
+            <span className="font-bold text-maroon">Preview:</span>
+            <span>{fmtInt(previewTotals.boxes)} boxes</span>
+            <span>{fmtInt(previewTotals.packets)} packets</span>
+            <span>{fmtCbm(previewTotals.cbm)} CBM</span>
+            <span>{fmtKg(previewTotals.kg)} kg</span>
+          </div>
+        )}
+      </div>
+
+      {/* Note */}
+      <div>
+        <label className="mb-1.5 block text-sm font-semibold text-ink/70">Admin note (optional)</label>
+        <input
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="Reason for editing this order"
+          className={INPUT_CLS}
+        />
+      </div>
+
+      <div className="flex justify-end gap-3">
+        <button type="button" onClick={onCancel} disabled={saving} className="rounded-full px-5 py-2.5 font-bold ring-1 ring-ink/15 hover:bg-ink/5 disabled:opacity-50">
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={saving}
+          className="inline-flex items-center gap-2 rounded-full bg-maroon px-5 py-2.5 font-bold text-cream hover:bg-maroon/90 disabled:opacity-70"
+        >
+          {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+          Save changes
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/* ------------------------------------------------------------------ main page */
 
 export default function OrderDetail() {
   const { id = '' } = useParams();
@@ -25,6 +229,8 @@ export default function OrderDetail() {
   const [action, setAction] = useState<'approved' | 'rejected' | null>(null);
   const [reason, setReason] = useState('');
   const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -72,15 +278,38 @@ export default function OrderDetail() {
     }
   };
 
+  const handleEditSave = async (patch: Parameters<typeof orderService.updateOrder>[1]) => {
+    setEditSaving(true);
+    try {
+      const updated = await orderService.updateOrder(order.id, patch, user?.name ?? 'Admin');
+      setOrder(updated);
+      setEditing(false);
+      toast.success(`Order ${updated.ref} updated successfully.`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not update the order.');
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
   return (
     <div>
       <div className="no-print flex flex-wrap items-center justify-between gap-3">
         <Link to="/admin" className="inline-flex items-center gap-2 text-sm font-semibold text-ink/60 hover:text-maroon">
           <ArrowLeft className="size-4" aria-hidden="true" /> All orders
         </Link>
-        <button type="button" onClick={() => window.print()} className="focus-dark inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold ring-1 ring-ink/10 hover:bg-ink/5">
-          <Printer className="size-4" aria-hidden="true" /> Print
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="focus-dark inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold ring-1 ring-ink/10 hover:bg-ink/5"
+          >
+            <Edit2 className="size-4" aria-hidden="true" /> Edit order
+          </button>
+          <button type="button" onClick={() => window.print()} className="focus-dark inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold ring-1 ring-ink/10 hover:bg-ink/5">
+            <Printer className="size-4" aria-hidden="true" /> Print
+          </button>
+        </div>
       </div>
 
       <header className="mt-4 flex flex-wrap items-start justify-between gap-4">
@@ -228,6 +457,7 @@ export default function OrderDetail() {
         </div>
       </div>
 
+      {/* Approve / Reject modal */}
       <Modal
         open={action !== null}
         onClose={() => !saving && setAction(null)}
@@ -269,6 +499,25 @@ export default function OrderDetail() {
             {saving && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
             {action === 'approved' ? 'Yes, approve' : 'Yes, reject'}
           </button>
+        </div>
+      </Modal>
+
+      {/* Edit order modal */}
+      <Modal
+        open={editing}
+        onClose={() => !editSaving && setEditing(false)}
+        locked={editSaving}
+        size="lg"
+        title="Edit order"
+        description={`${order.ref} · ${order.customer.name}`}
+      >
+        <div className="mt-4">
+          <EditOrderPanel
+            order={order}
+            onSave={handleEditSave}
+            onCancel={() => setEditing(false)}
+            saving={editSaving}
+          />
         </div>
       </Modal>
     </div>

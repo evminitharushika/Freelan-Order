@@ -2,6 +2,16 @@ import { PRODUCT_BY_ID } from '../data/catalog';
 import { buildLines, sumTotals } from '../lib/calc';
 import type { Customer, Order, OrderLine, OrderStatus, Quantities } from '../lib/types';
 import { delay, readJSON, writeJSON } from './storage';
+import type { AdminProduct } from './productService';
+
+/** Read admin-created products from storage (lazy, no circular dep on productService). */
+function getAdminProducts(): AdminProduct[] {
+  try {
+    return readJSON<AdminProduct[]>('admin-products', []);
+  } catch {
+    return [];
+  }
+}
 
 export interface OrderQuery {
   search?: string;
@@ -32,6 +42,8 @@ export interface OrderService {
   stats(): Promise<OrderStats>;
   get(idOrRef: string): Promise<Order | null>;
   setStatus(id: string, status: Exclude<OrderStatus, 'pending'>, by: string, note?: string): Promise<Order>;
+  /** Update order customer info and/or item quantities (rebuilds lines & totals). */
+  updateOrder(id: string, patch: { customer?: Customer; quantities?: Quantities; note?: string }, by: string): Promise<Order>;
 }
 
 const ORDERS_KEY = 'orders';
@@ -49,10 +61,14 @@ function nextRef(date: Date): string {
 }
 
 function linesFrom(quantities: Quantities): OrderLine[] {
+  const adminProductById = new Map<number, AdminProduct>(getAdminProducts().map((p) => [p.id, p]));
   const products = Object.keys(quantities)
-    .map((id) => PRODUCT_BY_ID.get(Number(id)))
+    .map((id) => {
+      const n = Number(id);
+      return (PRODUCT_BY_ID.get(n) ?? adminProductById.get(n)) as (typeof PRODUCT_BY_ID extends ReadonlyMap<number, infer V> ? V : never) | AdminProduct | undefined;
+    })
     .filter((p): p is NonNullable<typeof p> => p !== undefined);
-  return buildLines(products, quantities);
+  return buildLines(products as Parameters<typeof buildLines>[0], quantities);
 }
 
 /* ------------------------------------------------------------------ seed data */
@@ -186,6 +202,35 @@ export const orderService: OrderService = {
       status,
       rejectionReason: status === 'rejected' ? note || undefined : undefined,
       history: [...current.history, { status, at: new Date().toISOString(), by, note: note || undefined }],
+    };
+    orders[idx] = updated;
+    save(orders);
+    return updated;
+  },
+
+  async updateOrder(id, patch, by) {
+    await delay(350);
+    const orders = all();
+    const idx = orders.findIndex((o) => o.id === id);
+    if (idx === -1) throw new Error('Order not found');
+    const current = orders[idx];
+    const newCustomer = patch.customer ?? current.customer;
+    const newItems = patch.quantities ? linesFrom(patch.quantities) : current.items;
+    if (patch.quantities && newItems.length === 0) throw new Error('An order must have at least one item.');
+    const updated: Order = {
+      ...current,
+      customer: newCustomer,
+      items: newItems,
+      totals: sumTotals(newItems),
+      history: [
+        ...current.history,
+        {
+          status: current.status,
+          at: new Date().toISOString(),
+          by,
+          note: patch.note || 'Order updated by admin',
+        },
+      ],
     };
     orders[idx] = updated;
     save(orders);

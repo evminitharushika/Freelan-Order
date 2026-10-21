@@ -1,10 +1,9 @@
 import { motion, useMotionValue, useSpring, useTransform, type MotionValue } from 'framer-motion';
-import { ArrowDown, ArrowRight, Leaf } from 'lucide-react';
+import { ArrowRight, Leaf } from 'lucide-react';
 import { useEffect, type ReactNode } from 'react';
 import { STATS } from '../../data/catalog';
 import { useOrderStart } from '../../hooks/useOrderStart';
 import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
-import { scrollToTarget } from '../../lib/scroll';
 import { PackIllustration } from '../product/PackIllustration';
 import { MagneticButton } from './MagneticButton';
 import { SpiceField } from './SpiceField';
@@ -31,8 +30,6 @@ function Float({ mx, my, depth, className, children, delay = 0, play }: { mx: Mo
     </motion.div>
   );
 }
-
-const BADGE_TEXT = 'PURE · SRI LANKAN · SPICES · PACKED FRESH · ';
 
 export function Hero({ ready }: Props) {
   const { startOrder } = useOrderStart();
@@ -85,7 +82,7 @@ export function Hero({ ready }: Props) {
             transition={{ delay: 0.05 }}
             className="mb-4 inline-flex items-center gap-2 rounded-full border border-cream/25 bg-maroon/25 px-3.5 py-1.5 text-[0.7rem] font-bold uppercase tracking-[0.28em] text-turmeric backdrop-blur-sm sm:text-xs"
           >
-            <Leaf className="size-3.5" aria-hidden="true" /> Spices & food products<span className="hidden sm:inline"> · Sri Lanka</span>
+            <Leaf className="size-3.5" aria-hidden="true" /> Spices &amp; food products<span className="hidden sm:inline"> · Sri Lanka</span>
           </motion.p>
 
           <h1 id="hero-title" className="font-display">
@@ -124,14 +121,6 @@ export function Hero({ ready }: Props) {
             <MagneticButton onClick={() => startOrder()}>
               Order now <ArrowRight className="size-5 transition-transform group-hover:translate-x-1" aria-hidden="true" />
             </MagneticButton>
-            <button
-              type="button"
-              onClick={() => scrollToTarget('products')}
-              className="group inline-flex items-center gap-2 rounded-full border-2 border-cream/35 px-6 py-4 font-bold text-cream transition hover:border-cream hover:bg-cream/10"
-            >
-              View products
-              <ArrowDown className="size-4 transition-transform group-hover:translate-y-0.5" aria-hidden="true" />
-            </button>
           </motion.div>
         </div>
 
@@ -152,38 +141,18 @@ export function Hero({ ready }: Props) {
           <Float mx={mx} my={my} depth={14} play={ready} delay={0.85} className="absolute top-[30%] right-[1%] w-[30%] rotate-[10deg]">
             <PackIllustration shape="bottle" name="Chilli Crush" sublabel="40g" palette={{ body: '#FFF8EC', accent: '#D90429', ink: '#4A0410' }} className="size-full drop-shadow-2xl" />
           </Float>
-
-          {/* Rotating stamp */}
-          <motion.div
-            className="absolute right-[4%] bottom-[2%] size-[30%] min-w-24"
-            animate={reduce ? undefined : { rotate: -360 }}
-            transition={{ duration: 24, repeat: Infinity, ease: 'linear' }}
-          >
-            <svg viewBox="0 0 120 120" className="size-full">
-              <defs>
-                <path id="badge-circle" d="M60,60 m-46,0 a46,46 0 1,1 92,0 a46,46 0 1,1 -92,0" />
-              </defs>
-              <circle cx="60" cy="60" r="58" fill="#4A0410" />
-              <text fontSize="10.4" fontWeight="800" letterSpacing="2.2" fill="#FFC300" fontFamily="Manrope, sans-serif">
-                <textPath href="#badge-circle">{BADGE_TEXT}</textPath>
-              </text>
-              <text x="60" y="70" textAnchor="middle" fontSize="30" fontFamily="Fraunces, serif" fontWeight="900" fill="#FFF8EC">
-                F
-              </text>
-            </svg>
-          </motion.div>
         </div>
       </div>
 
       {/* Scroll indicator */}
       <motion.button
         type="button"
-        onClick={() => scrollToTarget('products')}
+        onClick={() => window.scrollTo({ top: window.innerHeight, behavior: 'smooth' })}
         initial={{ opacity: 0 }}
         animate={ready ? { opacity: 1 } : undefined}
         transition={{ delay: 1.6 }}
         className="absolute bottom-6 left-1/2 hidden -translate-x-1/2 flex-col items-center gap-2 text-[0.65rem] font-bold uppercase tracking-[0.35em] text-cream/70 hover:text-cream sm:flex"
-        aria-label="Scroll to products"
+        aria-label="Scroll down"
       >
         Scroll
         <span className="flex h-11 w-6 justify-center rounded-full border-2 border-cream/40 pt-2">

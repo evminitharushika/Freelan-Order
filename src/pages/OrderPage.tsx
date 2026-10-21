@@ -14,9 +14,11 @@ import { useOrderDraft } from '../hooks/useOrderDraft';
 import { useOrderStart } from '../hooks/useOrderStart';
 import { buildLines } from '../lib/calc';
 import { cn, fmtCbm, fmtInt, fmtKg } from '../lib/format';
-import { PACK_TYPES, type PackType } from '../lib/types';
+import { PACK_TYPES, type PackType, type Product } from '../lib/types';
 import { draftService } from '../services/draftService';
 import { orderService } from '../services/orderService';
+import type { AdminProduct } from '../services/productService';
+import { readJSON } from '../services/storage';
 
 function Stat({ label, value, highlight }: { label: string; value: string; highlight: boolean }) {
   return (
@@ -36,9 +38,30 @@ export default function OrderPage() {
   const { quantities, setQty, clear, totals, lineCount } = useOrderDraft();
   const desktop = useMediaQuery('(min-width: 1024px)');
 
+  // Merge static products with active admin-created products
+  const [adminProducts, setAdminProducts] = useState<AdminProduct[]>([]);
+  useEffect(() => {
+    // Read admin products directly from localStorage (sync) and refresh on mount
+    const stored = readJSON<AdminProduct[]>('admin-products', []);
+    setAdminProducts(stored.filter((p) => p.active));
+  }, []);
+
+  const ALL_PRODUCTS = useMemo<Product[]>(() => {
+    const combined: Product[] = [...(PRODUCTS as Product[])];
+    for (const ap of adminProducts) {
+      if (!combined.some((p) => p.id === ap.id)) combined.push(ap as unknown as Product);
+    }
+    return combined;
+  }, [adminProducts]);
+
+  const ALL_CATEGORIES = useMemo(() => {
+    const cats = new Set(ALL_PRODUCTS.map((p) => p.category));
+    return CATEGORIES.filter((c) => cats.has(c.name));
+  }, [ALL_PRODUCTS]);
+
   const [params, setParams] = useSearchParams();
   const categorySlug = params.get('category') ?? 'all';
-  const activeCategory = CATEGORIES.find((c) => c.slug === categorySlug);
+  const activeCategory = ALL_CATEGORIES.find((c) => c.slug === categorySlug);
   const [search, setSearch] = useState('');
   const deferredSearch = useDeferredValue(search);
   const [pack, setPack] = useState<PackType | 'all'>('all');
@@ -62,7 +85,7 @@ export default function OrderPage() {
   const selectedFilter = selectedOnly ? quantities : null;
   const groups = useMemo(() => {
     const q = deferredSearch.trim().toLowerCase();
-    const filtered = PRODUCTS.filter(
+    const filtered = ALL_PRODUCTS.filter(
       (p) =>
         (!activeCategory || p.category === activeCategory.name) &&
         (pack === 'all' || p.packType === pack) &&
@@ -70,16 +93,16 @@ export default function OrderPage() {
         (!q || `${p.name} ${p.weight} ${p.category}`.toLowerCase().includes(q)),
     );
     return groupProducts(filtered);
-  }, [activeCategory, pack, selectedFilter, deferredSearch]);
+  }, [ALL_PRODUCTS, activeCategory, pack, selectedFilter, deferredSearch]);
 
   const rowCount = groups.reduce((n, g) => n + g.items.length, 0);
   const selectedPerCategory = useMemo(() => {
     const m = new Map<string, number>();
-    for (const p of PRODUCTS) if ((quantities[p.id] ?? 0) > 0) m.set(p.category, (m.get(p.category) ?? 0) + 1);
+    for (const p of ALL_PRODUCTS) if ((quantities[p.id] ?? 0) > 0) m.set(p.category, (m.get(p.category) ?? 0) + 1);
     return m;
-  }, [quantities]);
+  }, [ALL_PRODUCTS, quantities]);
 
-  const lines = useMemo(() => (reviewOpen ? buildLines(PRODUCTS, quantities) : []), [reviewOpen, quantities]);
+  const lines = useMemo(() => (reviewOpen ? buildLines(ALL_PRODUCTS, quantities) : []), [reviewOpen, ALL_PRODUCTS, quantities]);
 
   const onSubmitClick = () => {
     if (lineCount === 0) {
@@ -163,7 +186,7 @@ export default function OrderPage() {
 
         <nav aria-label="Categories" className="border-t border-cream/10">
           <div className="no-scrollbar mx-auto flex max-w-7xl gap-1.5 overflow-x-auto px-4 py-2 sm:px-6 lg:px-8" role="tablist">
-            {[{ slug: 'all', short: 'All', count: PRODUCTS.length, name: 'All' }, ...CATEGORIES].map((c) => {
+            {[{ slug: 'all', short: 'All', count: ALL_PRODUCTS.length, name: 'All' }, ...ALL_CATEGORIES].map((c) => {
               const active = c.slug === (activeCategory?.slug ?? 'all');
               const picked = c.slug === 'all' ? lineCount : (selectedPerCategory.get(c.name) ?? 0);
               return (
@@ -179,7 +202,7 @@ export default function OrderPage() {
                   )}
                 >
                   {c.name === 'Appertizers' ? 'Appetizers' : c.name}
-                  <span className={cn('tabular text-xs', active ? 'text-maroon/50' : 'text-cream/40')}>{c.count}</span>
+                  <span className={cn('tabular text-xs', active ? 'text-maroon/50' : 'text-cream/40')}>{'count' in c ? c.count : ALL_PRODUCTS.filter(p => p.category === c.name).length}</span>
                   {picked > 0 && <span className="tabular grid min-w-5 place-items-center rounded-full bg-turmeric px-1 text-[0.65rem] text-maroon">{picked}</span>}
                 </button>
               );
@@ -252,7 +275,7 @@ export default function OrderPage() {
         </div>
 
         <p className="mb-3 text-sm text-ink/55" aria-live="polite">
-          Showing {rowCount} of {PRODUCTS.length} items{activeCategory ? ` in ${activeCategory.name}` : ''}.
+          Showing {rowCount} of {ALL_PRODUCTS.length} items{activeCategory ? ` in ${activeCategory.name}` : ''}.
         </p>
 
         {groups.length === 0 ? (

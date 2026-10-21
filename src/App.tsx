@@ -9,6 +9,7 @@ const AdminLogin = lazy(() => import('./pages/admin/AdminLogin'));
 const AdminLayout = lazy(() => import('./components/admin/AdminLayout'));
 const Dashboard = lazy(() => import('./pages/admin/Dashboard'));
 const OrderDetail = lazy(() => import('./pages/admin/OrderDetail'));
+const Products = lazy(() => import('./pages/admin/Products'));
 const Profile = lazy(() => import('./pages/admin/Profile'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 
@@ -55,6 +56,7 @@ export default function App() {
           <Route index element={<Dashboard />} />
           <Route path="orders" element={<Dashboard ordersOnly />} />
           <Route path="orders/:id" element={<OrderDetail />} />
+          <Route path="products" element={<Products />} />
           <Route path="profile" element={<Profile />} />
         </Route>
         <Route path="*" element={<NotFound />} />

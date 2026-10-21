@@ -5,7 +5,6 @@ import { Hero } from '../components/landing/Hero';
 import { HowItWorks } from '../components/landing/HowItWorks';
 import { Loader } from '../components/landing/Loader';
 import { Navbar } from '../components/landing/Navbar';
-import { ProductShowcase } from '../components/landing/ProductShowcase';
 import { TrustStrip } from '../components/landing/TrustStrip';
 import { usePrefersReducedMotion } from '../hooks/useMediaQuery';
 import { ScrollTrigger, startSmoothScroll } from '../lib/scroll';
@@ -34,7 +33,6 @@ export default function Landing() {
       <Navbar />
       <main>
         <Hero ready={ready} />
-        <ProductShowcase />
         <TrustStrip />
         <HowItWorks />
       </main>

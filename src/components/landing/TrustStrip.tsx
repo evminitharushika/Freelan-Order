@@ -2,7 +2,7 @@ import { animate, motion, useInView } from 'framer-motion';
 import { Boxes, Globe, PackageCheck, Truck, type LucideIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { company } from '../../config/company';
-import { PRODUCTS, STATS } from '../../data/catalog';
+import { STATS } from '../../data/catalog';
 import { usePrefersReducedMotion } from '../../hooks/useMediaQuery';
 
 function Counter({ to, suffix = '' }: { to: number; suffix?: string }) {
@@ -40,23 +40,9 @@ const ITEMS: Item[] = [
   ...(company.claims.exportQuality.show ? [{ icon: Globe, title: company.claims.exportQuality.title, body: company.claims.exportQuality.body, placeholder: true }] : []),
 ];
 
-const MARQUEE = Array.from(new Set(PRODUCTS.map((p) => p.name.replace(/\s*-\s*(Bottle|Canisters)$/i, '')))).slice(0, 28);
-
 export function TrustStrip() {
   return (
     <section aria-labelledby="why-heading" className="relative z-20 bg-cream text-maroon">
-      {/* Spice-market ticker */}
-      <div className="relative -rotate-1 overflow-hidden border-y-4 border-maroon bg-turmeric py-3" aria-hidden="true">
-        <div className="flex w-max animate-[marquee_60s_linear_infinite] gap-8 whitespace-nowrap font-display text-2xl font-black italic sm:text-3xl">
-          {[...MARQUEE, ...MARQUEE].map((n, i) => (
-            <span key={i} className="flex items-center gap-8">
-              {n}
-              <span className="text-chilli">✦</span>
-            </span>
-          ))}
-        </div>
-      </div>
-
       <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 sm:py-28 lg:px-8">
         <div className="grid gap-10 lg:grid-cols-12">
           <div className="lg:col-span-4">

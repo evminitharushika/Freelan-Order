@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { ClipboardList, ExternalLink, LayoutDashboard, LogOut, Menu, UserRound, X } from 'lucide-react';
+import { ClipboardList, ExternalLink, LayoutDashboard, LogOut, Menu, Package, UserRound, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
@@ -9,6 +9,7 @@ import { Logo } from '../brand/Logo';
 const NAV = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/admin/orders', label: 'Orders', icon: ClipboardList, end: false },
+  { to: '/admin/products', label: 'Products', icon: Package, end: false },
   { to: '/admin/profile', label: 'My Profile', icon: UserRound, end: true },
 ];
 
